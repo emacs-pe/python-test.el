@@ -47,11 +47,6 @@
 ;; + [pytest][]
 ;; + [unittest][]: Needs the command-line interface available since python >=2.7
 ;;
-;; TODO:
-;;
-;; + Fontify "Captured stdout call" from py.test
-;; + Add support for --pdb flag
-;;
 ;; [nose]: https://nose.readthedocs.org/
 ;; [pytest]: https://pytest.org/
 ;; [unittest]: https://docs.python.org/library/unittest.html "Unit testing framework"
@@ -199,6 +194,7 @@ The topmost match has precedence."
   "Regexp for python class definition.")
 
 (defvar python-test-backends-history nil)
+(defvar python-test-extra-args-history nil)
 (defvar python-test-project-root-history nil)
 
 
@@ -256,7 +252,7 @@ It predates `python-nav-beginning-of-defun-regexp' to search a function definiti
     (if current-prefix-arg
         (list (read-directory-name "Project root: " project-root)
               (completing-read "Backend: " python-test-backends nil t nil 'python-test-backends-history)
-              (read-string "Extra args: "))
+              (read-string "Extra args: " nil 'python-test-extra-args-history))
       (list project-root python-test-backend ""))))
 
 (defun python-test-capture-path (&optional project-root)
@@ -320,6 +316,22 @@ This function is called from `compilation-filter-hook'."
   ;; TODO: use `compilation-filter-start' instead of `point-min'
   (ansi-color-apply-on-region (point-min) (point-max)))
 
+;; `python.el' variables introduced in Emacs 25.1
+(defvar python-shell--interpreter)
+(defvar python-shell--interpreter-args)
+
+(defun python-test-track-pdb-prompt ()
+  "Do something if pdb prompt is detected."
+  (let ((output (buffer-substring-no-properties compilation-filter-start (point-max))))
+    (when (string-match-p python-shell-prompt-pdb-regexp output)
+      (message "Entering pdb...")
+      (setq buffer-read-only nil)
+      (let ((python-shell--interpreter nil)
+            (python-shell--interpreter-args nil))
+        (set-process-filter (get-buffer-process (current-buffer)) 'comint-output-filter)
+        (inferior-python-mode)
+        (run-hook-with-args 'comint-output-filter-functions output)))))
+
 (define-compilation-mode python-test-mode "python-test"
   "Python test results compilation mode"
   (setq-local compilation-mode-font-lock-keywords
@@ -328,6 +340,7 @@ This function is called from `compilation-filter-hook'."
               python-test-compilation-regexp-alist-alist)
   (setq-local compilation-error-regexp-alist
               python-test-compilation-regexp-alist)
+  (add-hook 'compilation-filter-hook 'python-test-track-pdb-prompt nil t)
   (add-hook 'compilation-filter-hook 'python-test-ansi-color-filter nil t))
 
 (define-key python-test-mode-map (kbd "p") #'compilation-previous-error)

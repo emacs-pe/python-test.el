@@ -23,11 +23,6 @@
 + [pytest][]
 + [unittest][]: Needs the command-line interface available since python >=2.7
 
-### TODO
-
-+ Fontify "Captured stdout call" from py.test
-+ Add support for --pdb flag
-
 [nose]: https://nose.readthedocs.org/
 [pytest]: https://pytest.org/
 [unittest]: https://docs.python.org/library/unittest.html "Unit testing framework"
