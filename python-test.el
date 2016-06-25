@@ -148,23 +148,18 @@ The topmost match has precedence."
 
 ;; Faces
 (defface python-test-description
-  '((((class color) (background light))
-     :background "#eeeebb"
-     :foreground "#aaaa11")
-    (((class color) (background dark))
-     :background "#666622"
-     :foreground "#eeeebb"))
+  '((t :inherit warning))
   "Face for python-test error description lines."
   :group 'python-test)
 
 (defface python-test-error
-  '((((class color) (background light))
-     :background "#ffdddd"
-     :foreground "#aa2222")
-    (((class color) (background dark))
-     :background "#553333"
-     :foreground "#ffdddd"))
+  '((t :inherit error))
   "Face for python-test error lines."
+  :group 'python-test)
+
+(defface python-test-info
+  '((t :inherit success))
+  "Face for test information."
   :group 'python-test)
 
 
@@ -299,22 +294,24 @@ See `compilation-error-regexp-alist' for help on their format.")
 
 (defvar python-test-mode-font-lock-keywords
   `( ;; py.test error traces
-    (,(rx line-start (+ (or "!" "=")) space (+ not-newline) space (+ (or "!" "=")) line-end)
-     (0 compilation-info-face))
-    (,(rx line-start (+ "-") space (+ not-newline) space (+ "-") line-end)
-     (0 compilation-info-face))
-    (,(rx line-start (+ "_") space (+ not-newline) space (+ "_") line-end)
-     (0 compilation-info-face))
     (,(rx line-start ">" (+ space) (+ not-newline) line-end)
      (0 'python-test-description))
     (,(rx line-start "E" (+ space) (+ not-newline) line-end)
-     (0 'python-test-error))))
+     (0 'python-test-error))
+    ;; py.test information separators
+    (,(rx line-start (+ (in "-" "!" "=" "_")) (? space (+ not-newline) space) (+ (in "-" "!" "=" "_")) line-end)
+     (0 'python-test-info))
+    ;; nosetest information
+    (,(rx line-start "Ran " (+ num) " tests in " (+ not-newline) line-end)
+     (0 'python-test-info))
+    (,(rx line-start (or "OK" (and "FAILED (failures=" (+ num) ")")) line-end)
+     (0 'python-test-info))))
 
 (defun python-test-ansi-color-filter ()
-  "Handle match highlighting escape sequences inserted by the docker process.
+  "Handle match highlighting escape sequences.
+
 This function is called from `compilation-filter-hook'."
-  ;; TODO: use `compilation-filter-start' instead of `point-min'
-  (ansi-color-apply-on-region (point-min) (point-max)))
+  (ansi-color-apply-on-region compilation-filter-start (point)))
 
 ;; `python.el' variables introduced in Emacs 25.1
 (defvar python-shell--interpreter)
