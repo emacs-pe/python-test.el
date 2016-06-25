@@ -3,7 +3,7 @@
 ;; Copyright (c) 2015 Mario Rodas <marsam@users.noreply.github.com>
 
 ;; Author: Mario Rodas <marsam@users.noreply.github.com>
-;; URL: https://github.com/emacs-pe/python-test
+;; URL: https://github.com/emacs-pe/python-test.el
 ;; Keywords: convenience
 ;; Version: 0.1
 ;; Package-Requires: ((emacs "24.3"))
