@@ -267,7 +267,7 @@ It predates `python-nav-beginning-of-defun-regexp' to search a function definiti
 
 (defun python-test-path-module (file)
   "Convert a FILE path to a python module."
-  (replace-regexp-in-string "/" "." (file-name-sans-extension file)))
+  (subst-char-in-string ?/ ?. (file-name-sans-extension file)))
 
 (defun python-test-get-backend (backend-name)
   "Return for a BACKEND-NAME."

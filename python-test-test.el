@@ -31,14 +31,13 @@
 
 ;;; Code:
 
-(require 'python-test)
-(require 'undercover nil t)
-
-(when (fboundp 'undercover)
+(when (require 'undercover nil 'no-error)
   (undercover "python-test.el"))
 
-(ert-deftest python-test-basic-test ()
-  (should (equal 1 1)))
+(require 'python-test)
+
+(ert-deftest python-test-path-module ()
+  (should (equal (python-test-path-module "path/to/file.py") "path.to.file")))
 
 (provide 'python-test-test)
 
