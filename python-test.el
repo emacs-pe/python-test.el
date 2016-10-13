@@ -4,7 +4,7 @@
 
 ;; Author: Mario Rodas <marsam@users.noreply.github.com>
 ;; URL: https://github.com/emacs-pe/python-test.el
-;; Keywords: convenience
+;; Keywords: convenience, tools, processes
 ;; Version: 0.1
 ;; Package-Requires: ((emacs "24.3"))
 
@@ -61,13 +61,19 @@
 (defgroup python-test nil
   "Python testing integration"
   :prefix "python-test-"
-  :group 'applications)
+  :group 'compilation)
 
 (defcustom python-test-reuse-buffer t
   "Whether to reuse python test buffer."
   :type 'boolean
   :safe #'booleanp
   :group 'python-test)
+
+(defcustom python-test-command nil
+  "Command to execute as python test."
+  :type 'string
+  :group 'python-test)
+;;;###autoload(put 'python-test-command 'safe-local-variable (lambda (a) (and (stringp a) (or (not (boundp 'compilation-read-command)) compilation-read-command))))
 
 (defcustom python-test-project-root nil
   "Root of a python project."
@@ -145,6 +151,9 @@ The topmost match has precedence."
                 (mapcar (lambda (x) (list 'const (car x))) python-test-backends))
   :safe #'symbolp
   :group 'python-test)
+
+(defvar python-test-command-history nil)
+
 
 ;; Faces
 (defface python-test-description
@@ -211,6 +220,23 @@ The topmost match has precedence."
            (exec-path (python-shell-calculate-exec-path)))
        ,@body)))
 
+(defsubst python-test-as-symbol (string-or-symbol)
+  "If STRING-OR-SYMBOL is already a symbol, return it.  Otherwise convert it to a symbol and return that."
+  (if (symbolp string-or-symbol) string-or-symbol (intern string-or-symbol)))
+
+(defun python-test-read-command (command)
+  "Read python test COMMAND."
+  (read-shell-command "Test command: " command
+                      (if (equal (car python-test-command-history) command)
+                          '(python-test-command-history . 1)
+                        'python-test-command-history)))
+
+(defun python-test-name-function (mode command)
+  "Return compilation buffer name for MODE and COMMAND."
+  (if python-test-reuse-buffer
+      (format "*%s*" (downcase mode))
+    (format "*%s: %s*" (downcase mode) command)))
+
 (defun python-test-internal-capture ()
   "Capture python function internal.
 
@@ -260,10 +286,8 @@ It predates `python-nav-beginning-of-defun-regexp' to search a function definiti
     (let ((command (mapconcat #'shell-quote-argument (cons command args) " ")))
       (save-some-buffers (not compilation-ask-about-save) nil)
       (compilation-start command #'python-test-mode
-                         (lambda (_)
-                           (if python-test-reuse-buffer
-                               "*python-test*"
-                             (format "*python-test: %s*" command)))))))
+                         (lambda (mode)
+                           (python-test-name-function mode command))))))
 
 (defun python-test-path-module (file)
   "Convert a FILE path to a python module."
@@ -271,8 +295,7 @@ It predates `python-nav-beginning-of-defun-regexp' to search a function definiti
 
 (defun python-test-get-backend (backend-name)
   "Return for a BACKEND-NAME."
-  (or (assoc-default (if (symbolp backend-name) backend-name (intern backend-name))
-                     python-test-backends)
+  (or (assoc-default (python-test-as-symbol backend-name) python-test-backends)
       (error "Backend not found")))
 
 
@@ -439,6 +462,19 @@ information."
                                   (funcall project-args)
                                 project-args))))
       (apply #'python-test-execute command arguments))))
+
+;;;###autoload
+(defun python-test-command (command)
+  "Execute COMMAND."
+  (interactive (list (let ((command (eval python-test-command)))
+                       (if (or compilation-read-command current-prefix-arg)
+                           (python-test-read-command command)
+                         command))))
+  (python-test-with-environment
+    (save-some-buffers (not compilation-ask-about-save) nil)
+    (compilation-start command #'python-test-mode
+                       (lambda (mode)
+                         (python-test-name-function mode command)))))
 
 (provide 'python-test)
 ;; Local Variables:
