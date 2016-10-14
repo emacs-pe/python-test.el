@@ -5,7 +5,7 @@
 
 `python-test.el` allows the execution of python tests from Emacs.
 
-## Setup
+### Setup
 
 ### Python objects
 

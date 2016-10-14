@@ -6,7 +6,7 @@
 ;; URL: https://github.com/emacs-pe/python-test.el
 ;; Keywords: convenience, tools, processes
 ;; Version: 0.1
-;; Package-Requires: ((emacs "24.3"))
+;; Package-Requires: ((emacs "24.3") (cl-generic "0.3"))
 
 ;; This file is NOT part of GNU Emacs.
 
@@ -52,11 +52,12 @@
 ;; [unittest]: https://docs.python.org/library/unittest.html "Unit testing framework"
 
 ;;; Code:
-(eval-when-compile (require 'cl-lib))
+(eval-when-compile
+  (require 'cl-lib)
+  (require 'cl-generic))
 
-(require 'compile)
 (require 'python)
-
+(require 'compile)
 
 (defgroup python-test nil
   "Python testing integration"
@@ -65,6 +66,12 @@
 
 (defcustom python-test-reuse-buffer t
   "Whether to reuse python test buffer."
+  :type 'boolean
+  :safe #'booleanp
+  :group 'python-test)
+
+(defcustom python-test-disable-warnings nil
+  "Whether to disable warnings."
   :type 'boolean
   :safe #'booleanp
   :group 'python-test)
@@ -95,61 +102,13 @@ The topmost match has precedence."
 
 
 ;; Backends
-(defvar python-test-backends
-  '((unittest :command "python"
-              :default-args ("-m" "unittest")
-              :project-args ("discover")
-              :file-args (lambda ()
-                           (list (python-test-path-module (python-test-capture-path))))
-              :defun-args (lambda ()
-                            (error "Python unittest doesn't support testing functions"))
-              :class-args (lambda ()
-                            (list (format "%s.%s"
-                                          (python-test-path-module (python-test-capture-path))
-                                          (python-test-capture-class))))
-              :method-args (lambda ()
-                             (list (format "%s.%s.%s"
-                                           (python-test-path-module (python-test-capture-path))
-                                           (python-test-capture-class)
-                                           (python-test-capture-defun)))))
-    (pytest :command "py.test"
-            :file-args (lambda ()
-                         (list (python-test-capture-path)))
-            :defun-args (lambda ()
-                          (list (format "%s::%s"
-                                        (python-test-capture-path)
-                                        (python-test-capture-defun))))
-            :class-args (lambda ()
-                          (list (format "%s::%s"
-                                        (python-test-capture-path)
-                                        (python-test-capture-class))))
-            :method-args (lambda ()
-                           (list (format "%s::%s::%s"
-                                         (python-test-capture-path)
-                                         (python-test-capture-class)
-                                         (python-test-capture-defun)))))
-    (nose :command "nosetests"
-          :file-args (lambda ()
-                       (list (python-test-capture-path)))
-          :defun-args (lambda ()
-                        (list (format "%s:%s"
-                                      (python-test-capture-path)
-                                      (python-test-capture-defun))))
-          :class-args (lambda ()
-                        (list (format "%s:%s"
-                                      (python-test-capture-path)
-                                      (python-test-capture-class))))
-          :method-args (lambda ()
-                         (list (format "%s:%s.%s"
-                                       (python-test-capture-path)
-                                       (python-test-capture-class)
-                                       (python-test-capture-defun)))))))
+(defvar python-test-backends nil)
 
 (defcustom python-test-backend 'unittest
   "Default backend for `python-test'."
   :type (append '(choice)
-                (mapcar (lambda (x) (list 'const (car x))) python-test-backends))
-  :safe #'symbolp
+                (mapcar (lambda (x) (list 'const x)) python-test-backends))
+  :safe #'python-test-registered-backend-p
   :group 'python-test)
 
 (defvar python-test-command-history nil)
@@ -197,30 +156,13 @@ The topmost match has precedence."
   (python-test-rx line-start (* space) class (+ space) (group symbol-name))
   "Regexp for python class definition.")
 
-(defvar python-test-backends-history nil)
-(defvar python-test-extra-args-history nil)
-(defvar python-test-project-root-history nil)
-
 
 ;;; Internal functions
-(defmacro with-python-test-project-root (directory &rest body)
-  "Change from DIRECTORY and BODY."
-  (declare (indent 1) (debug t))
-  `(let ((default-directory (or (and ,directory
-                                     (file-name-as-directory ,directory))
-                                default-directory)))
-     ,@body))
+(defun python-test-registered-backend-p (backend)
+  "Determine whether `org-sync' BACKEND is registered."
+  (memq backend python-test-backends))
 
-(defmacro python-test-with-environment (&rest body)
-  "Modify shell environment for python support of BODY."
-  (declare (indent 0) (debug (body)))
-  (if (fboundp 'python-shell-with-environment)
-      `(python-shell-with-environment ,@body)
-    `(let ((process-environment (python-shell-calculate-process-environment))
-           (exec-path (python-shell-calculate-exec-path)))
-       ,@body)))
-
-(defsubst python-test-as-symbol (string-or-symbol)
+(defun python-test-as-symbol (string-or-symbol)
   "If STRING-OR-SYMBOL is already a symbol, return it.  Otherwise convert it to a symbol and return that."
   (if (symbolp string-or-symbol) string-or-symbol (intern string-or-symbol)))
 
@@ -263,40 +205,159 @@ It predates `python-nav-beginning-of-defun-regexp' to search a function definiti
            when (locate-dominating-file directory file)
            return it))
 
-(defun python-test-calculate-project-root ()
+(defun python-test-project-root ()
   "Calculate project root."
-  (or python-test-project-root (python-test-locate-root-file default-directory)))
+  (or python-test-project-root
+      (python-test-locate-root-file default-directory)))
 
 (defun python-test-read-backend ()
-  "Read path where python test will be executed."
-  (let ((project-root (or (python-test-calculate-project-root) default-directory)))
-    (if current-prefix-arg
-        (list (read-directory-name "Project root: " project-root)
-              (completing-read "Backend: " python-test-backends nil t nil 'python-test-backends-history)
-              (read-string "Extra args: " nil 'python-test-extra-args-history))
-      (list project-root python-test-backend ""))))
+  "Read the backend which will be used."
+  (list (or (and (not current-prefix-arg) python-test-backend)
+            (completing-read "Backend: " python-test-backends nil t nil))))
 
 (defun python-test-capture-path (&optional project-root)
   "Return current file relative from PROJECT-ROOT."
-  (file-relative-name (buffer-file-name) project-root))
+  (if buffer-file-name
+      (file-relative-name buffer-file-name project-root)
+    (user-error "Not available here")))
 
-(defun python-test-execute (command &rest args)
-  "Internal execute COMMAND using ARGS."
-  (python-test-with-environment
-    (let ((command (mapconcat #'shell-quote-argument (cons command args) " ")))
-      (save-some-buffers (not compilation-ask-about-save) nil)
-      (compilation-start command #'python-test-mode
-                         (lambda (mode)
-                           (python-test-name-function mode command))))))
+(defun python-test-quote-command (command &rest args)
+  "Quote COMMAND and ARGS."
+  (mapconcat #'shell-quote-argument (cons command args) " "))
+
+(defun python-test-resolve-executable (value)
+  "Resolve executable VALUE."
+  (cl-etypecase value
+    (stringp value)
+    (symbolp (symbol-value value))))
 
 (defun python-test-path-module (file)
   "Convert a FILE path to a python module."
   (subst-char-in-string ?/ ?. (file-name-sans-extension file)))
 
-(defun python-test-get-backend (backend-name)
-  "Return for a BACKEND-NAME."
-  (or (assoc-default (python-test-as-symbol backend-name) python-test-backends)
-      (error "Backend not found")))
+(defun python-test-context-command (backend context)
+  "Return BACKEND command from CONTEXT."
+  (cl-assert (python-test-registered-backend-p backend) nil "Unregistered python-test backend: %s" backend)
+  (let ((args (cl-ecase context
+                (project   (python-test-args-project backend))
+                (file      (python-test-args-file    backend))
+                (class     (python-test-args-class   backend))
+                (method    (python-test-args-method  backend))
+                (defun     (python-test-args-defun   backend))))
+        (executable (python-test-resolve-executable (python-test-executable backend))))
+    (apply #'python-test-quote-command executable args)))
+
+(defmacro python-test-with-project-root (&rest body)
+  "Execute BODY in python project root."
+  (declare (indent defun) (debug (body)))
+  (let ((project-root (cl-gensym "project-root")))
+    `(let ((,project-root (python-test-project-root)))
+       (let ((default-directory (if ,project-root
+                                    (file-name-as-directory ,project-root)
+                                  (or python-test-disable-warnings (lwarn 'python-test :warning "Could not locate python project root: %s" default-directory))
+                                  default-directory)))
+         ,@body))))
+
+(defmacro python-test-with-environment (&rest body)
+  "Modify shell environment for python support of BODY."
+  (declare (indent 0) (debug (body)))
+  (if (fboundp 'python-shell-with-environment)
+      `(python-shell-with-environment ,@body)
+    `(let ((process-environment (python-shell-calculate-process-environment))
+           (exec-path (python-shell-calculate-exec-path)))
+       ,@body)))
+
+;;; Backends
+(cl-defgeneric python-test-executable (backend)
+  "Backend args to test a project.")
+
+(cl-defgeneric python-test-args-project (backend)
+  "Backend args to test a project.")
+
+(cl-defgeneric python-test-args-file (backend)
+  "Backend args to test a file.")
+
+(cl-defgeneric python-test-args-class (backend)
+  "Backend args to test a class.")
+
+(cl-defgeneric python-test-args-method (backend)
+  "Backend args to test a class method.")
+
+(cl-defgeneric python-test-args-defun (backend)
+  "Backend args to test a function.")
+
+;; unittest
+(add-to-list 'python-test-backends 'unittest)
+
+(cl-defmethod python-test-executable ((_backend (eql unittest)))
+  "Python unitest executable is python itself, given that unittest is executed as module."
+  python-shell-interpreter)
+
+(cl-defmethod python-test-args-project ((_backend (eql unittest)))
+  (list "-m" "unittest" "discover"))
+
+(cl-defmethod python-test-args-file ((_backend (eql unittest)))
+  (list "-m" "unitest" (python-test-path-module (python-test-capture-path))))
+
+(cl-defmethod python-test-args-class ((_backend (eql unittest)))
+  (list "-m" "unitest" (format "%s.%s"
+                               (python-test-path-module (python-test-capture-path))
+                               (python-test-capture-class))))
+
+(cl-defmethod python-test-args-method ((_backend (eql unittest)))
+  (list "-m" "unitest" (format "%s.%s.%s"
+                               (python-test-path-module (python-test-capture-path))
+                               (python-test-capture-class)
+                               (python-test-capture-defun))))
+
+(cl-defmethod python-test-args-defun ((_backend (eql unittest)))
+  (user-error "Python unittest doesn't support testing functions"))
+
+
+;; py.test
+(add-to-list 'python-test-backends 'pytest)
+
+(cl-defmethod python-test-executable ((_backend (eql pytest)))
+  "Py.test executable name."
+  "py.test")
+
+(cl-defmethod python-test-args-project ((_backend (eql pytest)))
+  (list))
+
+(cl-defmethod python-test-args-file ((_backend (eql pytest)))
+  (list (python-test-capture-path)))
+
+(cl-defmethod python-test-args-class ((_backend (eql pytest)))
+  (list (format "%s::%s" (python-test-capture-path) (python-test-capture-class))))
+
+(cl-defmethod python-test-args-method ((_backend (eql pytest)))
+  (list (format "%s::%s::%s" (python-test-capture-path) (python-test-capture-class) (python-test-capture-defun))))
+
+(cl-defmethod python-test-args-defun ((_backend (eql pytest)))
+  (list (format "%s::%s" (python-test-capture-path) (python-test-capture-defun))))
+
+
+;; nosetests
+(add-to-list 'python-test-backends 'nose)
+
+(cl-defmethod python-test-executable ((_backend (eql nose)))
+  "Nosetests executable."
+  "nosetests")
+
+(cl-defmethod python-test-args-project ((_backend (eql nose)))
+  (list))
+
+(cl-defmethod python-test-args-file ((_backend (eql nose)))
+  (list (python-test-capture-path)))
+
+(cl-defmethod python-test-args-class ((_backend (eql nose)))
+  (list (format "%s:%s" (python-test-capture-path) (python-test-capture-class))))
+
+(cl-defmethod python-test-args-method ((_backend (eql nose)))
+  (list (format "%s:%s.%s" (python-test-capture-path) (python-test-capture-class) (python-test-capture-defun))))
+
+(cl-defmethod python-test-args-defun ((_backend (eql nose)))
+  (list (format "%s:%s" (python-test-capture-path) (python-test-capture-defun))))
 
 
 ;;; python-test-mode
@@ -386,95 +447,48 @@ information."
 
 
 ;;;###autoload
-(defun python-test-function (project-root backend-name extra-args)
-  "Test a python function inside PROJECT-ROOT using BACKEND-NAME with EXTRA-ARGS."
+(defun python-test-project (backend)
+  "Execute python project test with BACKEND."
   (interactive (python-test-read-backend))
-  (with-python-test-project-root project-root
-    (let* ((backend (python-test-get-backend backend-name))
-           (command (or (plist-get backend :command) (error "Not command")))
-           (defun-args (plist-get backend :defun-args))
-           (arguments (append (plist-get backend :default-args)
-                              (split-string-and-unquote extra-args)
-                              (if (functionp defun-args)
-                                  (funcall defun-args)
-                                defun-args))))
-      (apply #'python-test-execute command arguments))))
+  (python-test (python-test-context-command (python-test-as-symbol backend) 'project)))
 
 ;;;###autoload
-(defun python-test-method (project-root backend-name extra-args)
-  "Test a single python method inside PROJECT-ROOT using BACKEND-NAME with EXTRA-ARGS."
+(defun python-test-file (backend)
+  "Execute python file test with BACKEND."
   (interactive (python-test-read-backend))
-  (with-python-test-project-root project-root
-    (let* ((backend (python-test-get-backend backend-name))
-           (command (or (plist-get backend :command) (error "Not command defined for %s backend" backend-name)))
-           (method-args (plist-get backend :method-args))
-           (arguments (append (plist-get backend :default-args)
-                              (split-string-and-unquote extra-args)
-                              (if (functionp method-args)
-                                  (funcall method-args)
-                                method-args))))
-      (apply #'python-test-execute command arguments))))
+  (python-test (python-test-context-command (python-test-as-symbol backend) 'file)))
 
 ;;;###autoload
-(defun python-test-class (project-root backend-name extra-args)
-  "Test a single python class inside PROJECT-ROOT using BACKEND-NAME with EXTRA-ARGS."
+(defun python-test-class (backend)
+  "Execute python class test with BACKEND."
   (interactive (python-test-read-backend))
-  (with-python-test-project-root project-root
-    (let* ((backend (python-test-get-backend backend-name))
-           (command (or (plist-get backend :command) (error "Not command defined for %s backend" backend-name)))
-           (class-args (plist-get backend :class-args))
-           (arguments (append (plist-get backend :default-args)
-                              (split-string-and-unquote extra-args)
-                              (if (functionp class-args)
-                                  (funcall class-args)
-                                class-args))))
-      (apply #'python-test-execute command arguments))))
+  (python-test (python-test-context-command (python-test-as-symbol backend) 'class)))
 
 ;;;###autoload
-(defun python-test-file (project-root backend-name extra-args)
-  "Test a single python file inside PROJECT-ROOT using BACKEND-NAME with EXTRA-ARGS."
+(defun python-test-method (backend)
+  "Execute python method test with BACKEND."
   (interactive (python-test-read-backend))
-  (with-python-test-project-root project-root
-    (let* ((backend (python-test-get-backend backend-name))
-           (command (or (plist-get backend :command) (error "Not command defined for %s backend" backend-name)))
-           (file-args (plist-get backend :file-args))
-           (arguments (append (plist-get backend :default-args)
-                              (split-string-and-unquote extra-args)
-                              (if (functionp file-args)
-                                  (funcall file-args)
-                                file-args))))
-      (apply #'python-test-execute command arguments))))
+  (python-test (python-test-context-command (python-test-as-symbol backend) 'method)))
 
 ;;;###autoload
-(defalias 'python-test #'python-test-project)
-
-;;;###autoload
-(defun python-test-project (project-root backend-name extra-args)
-  "Test a python project from PROJECT-ROOT using BACKEND-NAME with EXTRA-ARGS."
+(defun python-test-function (backend)
+  "Execute python function test with BACKEND."
   (interactive (python-test-read-backend))
-  (with-python-test-project-root project-root
-    (let* ((backend (python-test-get-backend backend-name))
-           (command (or (plist-get backend :command) (error "Not command defined for %s backend" backend-name)))
-           (project-args (plist-get backend :project-args))
-           (arguments (append (plist-get backend :default-args)
-                              (split-string-and-unquote extra-args)
-                              (if (functionp project-args)
-                                  (funcall project-args)
-                                project-args))))
-      (apply #'python-test-execute command arguments))))
+  (python-test (python-test-context-command (python-test-as-symbol backend) 'defun)))
 
 ;;;###autoload
-(defun python-test-command (command)
-  "Execute COMMAND."
+(defun python-test (command)
+  "Execute COMMAND with python test."
   (interactive (list (let ((command (eval python-test-command)))
                        (if (or compilation-read-command current-prefix-arg)
                            (python-test-read-command command)
                          command))))
   (python-test-with-environment
-    (save-some-buffers (not compilation-ask-about-save) nil)
-    (compilation-start command #'python-test-mode
-                       (lambda (mode)
-                         (python-test-name-function mode command)))))
+    (python-test-with-project-root
+      (save-some-buffers (not compilation-ask-about-save) nil)
+      (compilation-start command #'python-test-mode
+                         (lambda (mode)
+                           (python-test-name-function mode command))))))
 
 (provide 'python-test)
 ;; Local Variables:
