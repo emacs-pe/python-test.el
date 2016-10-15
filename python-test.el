@@ -173,12 +173,6 @@ The topmost match has precedence."
                           '(python-test-command-history . 1)
                         'python-test-command-history)))
 
-(defun python-test-name-function (mode command)
-  "Return compilation buffer name for MODE and COMMAND."
-  (if python-test-reuse-buffer
-      (format "*%s*" (downcase mode))
-    (format "*%s: %s*" (downcase mode) command)))
-
 (defun python-test-internal-capture ()
   "Capture python function internal.
 
@@ -450,31 +444,36 @@ information."
 (defun python-test-project (backend)
   "Execute python project test with BACKEND."
   (interactive (python-test-read-backend))
-  (python-test (python-test-context-command (python-test-as-symbol backend) 'project)))
+  (python-test-with-project-root
+    (python-test (python-test-context-command (python-test-as-symbol backend) 'project))))
 
 ;;;###autoload
 (defun python-test-file (backend)
   "Execute python file test with BACKEND."
   (interactive (python-test-read-backend))
-  (python-test (python-test-context-command (python-test-as-symbol backend) 'file)))
+  (python-test-with-project-root
+    (python-test (python-test-context-command (python-test-as-symbol backend) 'file))))
 
 ;;;###autoload
 (defun python-test-class (backend)
   "Execute python class test with BACKEND."
   (interactive (python-test-read-backend))
-  (python-test (python-test-context-command (python-test-as-symbol backend) 'class)))
+  (python-test-with-project-root
+    (python-test (python-test-context-command (python-test-as-symbol backend) 'class))))
 
 ;;;###autoload
 (defun python-test-method (backend)
   "Execute python method test with BACKEND."
   (interactive (python-test-read-backend))
-  (python-test (python-test-context-command (python-test-as-symbol backend) 'method)))
+  (python-test-with-project-root
+    (python-test (python-test-context-command (python-test-as-symbol backend) 'method))))
 
 ;;;###autoload
 (defun python-test-function (backend)
   "Execute python function test with BACKEND."
   (interactive (python-test-read-backend))
-  (python-test (python-test-context-command (python-test-as-symbol backend) 'defun)))
+  (python-test-with-project-root
+    (python-test (python-test-context-command (python-test-as-symbol backend) 'defun))))
 
 ;;;###autoload
 (defun python-test (command)
@@ -484,11 +483,12 @@ information."
                            (python-test-read-command command)
                          command))))
   (python-test-with-environment
-    (python-test-with-project-root
-      (save-some-buffers (not compilation-ask-about-save) nil)
-      (compilation-start command #'python-test-mode
-                         (lambda (mode)
-                           (python-test-name-function mode command))))))
+    (save-some-buffers (not compilation-ask-about-save) nil)
+    (compilation-start command #'python-test-mode
+                       (lambda (mode)
+                         (if python-test-reuse-buffer
+                             (format "*%s*" (downcase mode))
+                           (format "*%s: %s*" (downcase mode) command))))))
 
 (provide 'python-test)
 ;; Local Variables:
