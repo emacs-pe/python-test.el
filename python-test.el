@@ -434,7 +434,7 @@ information."
               python-test-compilation-regexp-alist-alist)
   (setq-local compilation-error-regexp-alist
               python-test-compilation-regexp-alist)
-  (add-hook 'compilation-filter-hook 'python-test-track-pdb-prompt nil t)
+  (add-hook 'compilation-filter-hook 'python-test-track-pdb-prompt t t)
   (add-hook 'compilation-filter-hook 'python-test-ansi-color-filter nil t))
 
 (define-key python-test-mode-map (kbd "p") #'compilation-previous-error)
