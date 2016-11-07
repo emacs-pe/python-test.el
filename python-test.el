@@ -395,6 +395,7 @@ This function is called from `compilation-filter-hook'."
 (defvar python-shell--interpreter)
 (defvar python-shell--interpreter-args)
 
+;;;###autoload
 (defun python-test-track-pdb-prompt ()
   "Change compilation to `python-inferior-mode' when a pdb prompt is detected.
 
