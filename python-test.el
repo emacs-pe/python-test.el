@@ -405,7 +405,7 @@ work is meant to be added to `compilation-filter-hook'.  To go
 back to `compilation-mode' you need to call
 \\[python-test-back-to-compilation]."
   (let ((output (ignore-errors (buffer-substring-no-properties compilation-filter-start (point)))))
-    (when (and output (string-match-p python-shell-prompt-pdb-regexp output))
+    (when (and output (string-match-p (concat "^" python-shell-prompt-pdb-regexp) output))
       (message "Entering pdb...")
       (setq buffer-read-only nil)
       (let ((python-shell--interpreter nil)
