@@ -362,6 +362,9 @@ It predates `python-nav-beginning-of-defun-regexp' to search a function definiti
           (group (1+ (not (any "\"<")))) ; avoid `<stdin>' &c
           "\", line " (group (1+ digit)))
      1 2)
+    (nose
+     ,(rx "vi +" (group (+ num)) " " (group (+ not-newline)) "  # " (+ not-newline))
+     2 1)
     (pytest
      ,(rx line-start (group (+ any)) ":" (group (1+ digit)) ": " (? (group (+ not-newline))))
      1 2 3))
