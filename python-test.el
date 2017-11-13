@@ -290,22 +290,22 @@ It predates `python-nav-beginning-of-defun-regexp' to search a function definiti
 (add-to-list 'python-test-backends 'unittest)
 
 (cl-defmethod python-test-executable ((_backend (eql unittest)))
-  "Python unitest executable is python itself, given that unittest is executed as module."
+  "Python unittest executable is python itself, given that unittest is executed as module."
   python-shell-interpreter)
 
 (cl-defmethod python-test-args-project ((_backend (eql unittest)))
   (list "-m" "unittest" "discover"))
 
 (cl-defmethod python-test-args-file ((_backend (eql unittest)))
-  (list "-m" "unitest" (python-test-path-module (python-test-capture-path))))
+  (list "-m" "unittest" (python-test-path-module (python-test-capture-path))))
 
 (cl-defmethod python-test-args-class ((_backend (eql unittest)))
-  (list "-m" "unitest" (format "%s.%s"
+  (list "-m" "unittest" (format "%s.%s"
                                (python-test-path-module (python-test-capture-path))
                                (python-test-capture-class))))
 
 (cl-defmethod python-test-args-method ((_backend (eql unittest)))
-  (list "-m" "unitest" (format "%s.%s.%s"
+  (list "-m" "unittest" (format "%s.%s.%s"
                                (python-test-path-module (python-test-capture-path))
                                (python-test-capture-class)
                                (python-test-capture-defun))))
@@ -384,7 +384,7 @@ It predates `python-nav-beginning-of-defun-regexp' to search a function definiti
           (python-test-path-module (python-test-capture-path (python-test-django-manage.py-path)))))
 
 (cl-defmethod python-test-executable ((_backend (eql django)))
-  "Python unitest executable is python itself, given that django is executed as module."
+  "Python unittest executable is python itself, given that django is executed as module."
   python-shell-interpreter)
 
 (cl-defmethod python-test-args-project ((_backend (eql django)))
