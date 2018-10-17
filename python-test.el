@@ -368,49 +368,37 @@ It predates `python-nav-beginning-of-defun-regexp' to search a function definiti
   (when python-test-django-settings
     (format "--settings=%s" python-test-django-settings)))
 
-(defun python-test-django-manage.py-path ()
-  "Returns the path to manage.py"
-  (expand-file-name (locate-dominating-file buffer-file-name "manage.py")))
-
-(defun python-test-django-manage.py ()
-  (format "%smanage.py" (python-test-django-manage.py-path)))
-
-(defun python-test-django-package ()
-  (substring (file-relative-name (python-test-django-manage.py-path)
-                                 (format "%s../" (python-test-django-manage.py-path))) 0 -1))
-
 (defun python-test-django-module ()
-  (format "%s.%s" (python-test-django-package)
-          (python-test-path-module (python-test-capture-path (python-test-django-manage.py-path)))))
+  "Return python module string for current file."
+  (python-test-path-module (python-test-capture-path (python-test-project-root))))
 
 (cl-defmethod python-test-executable ((_backend (eql django)))
   "Python unittest executable is python itself, given that django is executed as module."
   python-shell-interpreter)
 
 (cl-defmethod python-test-args-project ((_backend (eql django)))
-  (remove nil (list (python-test-django-manage.py) "test"
-                    (python-test-django-settings-arg)
-                    (python-test-django-package))))
+  (remove nil (list "-m" "django" "test"
+                    (python-test-django-settings-arg))))
 
 (cl-defmethod python-test-args-file ((_backend (eql django)))
-  (remove nil (list (python-test-django-manage.py) "test"
-                    (python-test-django-settings-arg)
-                    (python-test-django-module))))
+  (remove nil (list  "-m" "django" "test"
+                     (python-test-django-settings-arg)
+                     (python-test-django-module))))
 
 (cl-defmethod python-test-args-class ((_backend (eql django)))
-  (remove nil (list (python-test-django-manage.py) "test"
+  (remove nil (list "-m" "django" "test"
                     (python-test-django-settings-arg)
                     (format "%s.%s"
                             (python-test-django-module)
                             (python-test-capture-class)))))
 
 (cl-defmethod python-test-args-method ((_backend (eql django)))
-  (remove nil (list (python-test-django-manage.py) "test"
-                    (python-test-django-settings-arg)
-                    (format "%s.%s.%s"
-                            (python-test-django-module)
-                            (python-test-capture-class)
-                            (python-test-capture-defun)))))
+  (remove nil (list  "-m" "django" "test"
+                     (python-test-django-settings-arg)
+                     (format "%s.%s.%s"
+                             (python-test-django-module)
+                             (python-test-capture-class)
+                             (python-test-capture-defun)))))
 
 (cl-defmethod python-test-args-defun ((_backend (eql django)))
   (user-error "Django doesn't support testing functions"))
