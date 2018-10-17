@@ -87,6 +87,7 @@
   :type 'string
   :safe #'stringp
   :group 'python-test)
+;;;###autoload(put 'python-test-project-root 'safe-local-variable #'stringp)
 
 (defcustom python-test-project-root-files
   '("setup.py"                          ; Setuptools file
@@ -116,6 +117,7 @@ The topmost match has precedence."
                 (mapcar (lambda (x) (list 'const x)) python-test-backends))
   :safe #'python-test-registered-backend-p
   :group 'python-test)
+;;;###autoload(put 'python-test-backend 'safe-local-variable #'python-test-registered-backend-p)
 
 (defvar python-test-command-history nil)
 
@@ -164,6 +166,7 @@ The topmost match has precedence."
 
 
 ;;; Internal functions
+;;;###autoload
 (defun python-test-registered-backend-p (backend)
   "Determine whether `org-sync' BACKEND is registered."
   (memq backend python-test-backends))
